@@ -8,7 +8,7 @@ export function Footer() {
           <div>
             <p className="eyebrow text-white/60 mb-6">The Journal</p>
             <h2 className="font-display text-4xl md:text-6xl leading-[0.95] max-w-xl">
-              Join the atelier — dispatches on new collections, private previews, and cultural notes.
+              Join the atelier dispatches on new collections, private previews, and cultural notes.
             </h2>
           </div>
           <form className="flex flex-col justify-end gap-4">
@@ -18,7 +18,9 @@ export function Footer() {
                 placeholder="Your email address"
                 className="flex-1 bg-transparent outline-none placeholder:text-white/40 text-sm"
               />
-              <button className="eyebrow text-white/80 hover:text-white transition">Subscribe →</button>
+              <button className="eyebrow text-white/80 hover:text-white transition">
+                Subscribe
+              </button>
             </div>
             <p className="text-xs text-white/50">By subscribing you agree to our privacy policy.</p>
           </form>
@@ -32,15 +34,34 @@ export function Footer() {
             A contemporary luxury house rooted in African heritage and modern craft.
           </p>
         </div>
-        <FooterCol title="Collections" links={[
-          ["Women", "/shop"], ["Men", "/shop"], ["Bridal", "/shop"], ["Bespoke", "/bespoke"], ["Accessories", "/shop"],
-        ]} />
-        <FooterCol title="House" links={[
-          ["About", "/about"], ["Craftsmanship", "/about"], ["Sustainability", "/about"], ["Journal", "/about"],
-        ]} />
-        <FooterCol title="Client Care" links={[
-          ["Contact", "/contact"], ["Shipping", "/contact"], ["Returns", "/contact"], ["Size Guide", "/contact"],
-        ]} />
+        <FooterCol
+          title="Collections"
+          links={[
+            ["Women", "/shop"],
+            ["Men", "/shop"],
+            ["Bridal", "/shop"],
+            ["Bespoke", "/bespoke"],
+            ["Accessories", "/shop"],
+          ]}
+        />
+        <FooterCol
+          title="House"
+          links={[
+            ["About", "/about"],
+            ["Craftsmanship", "/about"],
+            ["Sustainability", "/about"],
+            ["Journal", "/about"],
+          ]}
+        />
+        <FooterCol
+          title="Client Care"
+          links={[
+            ["Contact", "/contact"],
+            ["Shipping", "/contact"],
+            ["Returns", "/contact"],
+            ["Size Guide", "/contact"],
+          ]}
+        />
       </div>
 
       <div className="border-t border-white/10">

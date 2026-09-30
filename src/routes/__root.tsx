@@ -14,6 +14,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
+import { useSyncProducts } from "@/lib/shop-query";
 
 function NotFoundComponent() {
   return (
@@ -109,14 +110,22 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const isAdmin = path.startsWith("/admin");
+  const isAuthPage = path === "/login" || path === "/signup";
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Header />
+      <CatalogSync />
+      {!isAdmin && <Header />}
       <main key={path} className="animate-in fade-in duration-500">
         <Outlet />
       </main>
-      <Footer />
+      {!isAdmin && !isAuthPage && <Footer />}
     </QueryClientProvider>
   );
+}
+
+function CatalogSync() {
+  useSyncProducts();
+  return null;
 }

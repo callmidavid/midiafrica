@@ -6,15 +6,22 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+// PROD: full server build (SSR + server functions + API routes for
+// /api/auth/*, /api/webhooks/bachs). Nitro auto-targets the deploy platform
+// (Cloudflare on Lovable, Vercel/Netlify/self-hosted elsewhere).
 export default defineConfig({
-  nitro: false,
+  // Local/self-hosted runs use the node server. Inside a Lovable build the
+  // preset is forced to Cloudflare regardless of this setting.
+  nitro: { preset: "node-server" },
   tanstackStart: {
     spa: {
-      enabled: true,
-      prerender: {
-        outputPath: "/index.html",
-      },
+      enabled: false,
     },
   },
-
+  // Pass the server settings down to Vite safely here
+  vite: {
+    server: {
+      allowedHosts: ["kathaleen-moldy-citizenly.ngrok-free.dev"],
+    },
+  },
 });

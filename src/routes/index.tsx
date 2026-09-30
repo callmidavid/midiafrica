@@ -10,7 +10,7 @@ import cb from "@/assets/collection-bridal.jpg";
 import ca from "@/assets/collection-accessories.jpg";
 import craft from "@/assets/craft.jpg";
 import about from "@/assets/about.jpg";
-import { products } from "@/lib/products";
+import { useProducts } from "@/lib/shop-store";
 import { ProductCard } from "@/components/site/ProductCard";
 import { Reveal } from "@/components/site/Reveal";
 
@@ -171,7 +171,7 @@ function Collections() {
           <Reveal
             key={c.title}
             delay={i * 0.08}
-            className={`group relative overflow-hidden ${c.span} h-[70vh] md:h-auto`}
+            className={`group relative overflow-hidden ${c.span} h-[62svh] md:h-auto`}
           >
             <Link to="/shop" className="block h-full">
               <img
@@ -201,8 +201,10 @@ function Collections() {
 }
 
 function FeaturedProducts() {
+  const { products } = useProducts();
+  const featured = products.filter((p) => p.published && p.featured).slice(0, 8);
   return (
-    <section className="px-6 md:px-10 py-24 md:py-32 bg-muted/40 border-y border-border">
+    <section className="px-4 sm:px-6 md:px-10 py-20 md:py-32 bg-muted/40 border-y border-border">
       <div className="max-w-[1600px] mx-auto">
         <div className="flex items-end justify-between gap-8 mb-12 md:mb-16">
           <Reveal>
@@ -216,8 +218,8 @@ function FeaturedProducts() {
           </Reveal>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20">
-          {products.slice(0, 8).map((p, i) => (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-3 sm:gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-20">
+          {featured.map((p, i) => (
             <ProductCard key={p.id} product={p} index={i} />
           ))}
         </div>

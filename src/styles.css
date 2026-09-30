@@ -107,6 +107,7 @@
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
   }
   h1, h2, h3, h4, .font-display {
     font-family: var(--font-serif);

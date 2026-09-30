@@ -1,7 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Menu, Search, ShoppingBag, X, Sun, Moon } from "lucide-react";
+import { Heart, Menu, Search, ShoppingBag, User, X, Sun, Moon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useCart, useSettings } from "@/lib/shop-store";
+import { useSession, authClient } from "@/lib/auth-client";
+import { CartDrawer } from "@/components/site/CartDrawer";
 
 const nav = [
   { to: "/shop", label: "Shop" },
@@ -12,8 +15,13 @@ const nav = [
 
 export function Header() {
   const [open, setOpen] = useState(false);
+  const [bagOpen, setBagOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [dark, setDark] = useState(false);
+  const count = useCart((s) => s.items.reduce((n, i) => n + i.qty, 0));
+  const { currency, setCurrency } = useSettings();
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string } | undefined)?.role;
   const path = useRouterState({ select: (s) => s.location.pathname });
   const isHome = path === "/";
 
@@ -41,11 +49,11 @@ export function Header() {
             : "bg-transparent"
         }`}
       >
-        <div className="mx-auto grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 py-4 md:px-10 md:py-5">
-          <div className="flex items-center gap-4">
+        <div className="mx-auto grid grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4 md:px-10 md:py-5">
+          <div className="flex items-center gap-1 sm:gap-4">
             <button
               onClick={() => setOpen(true)}
-              className="grid h-10 w-10 place-items-center -ml-2"
+              className="grid h-11 w-11 place-items-center -ml-2"
               aria-label="Open menu"
             >
               <Menu className="h-5 w-5" />
@@ -64,28 +72,44 @@ export function Header() {
             </nav>
           </div>
 
-          <Link to="/" className="font-display text-xl md:text-2xl tracking-[0.2em] uppercase text-center whitespace-nowrap">
+          <Link to="/" className="font-display text-lg sm:text-xl md:text-2xl tracking-[0.18em] uppercase text-center whitespace-nowrap">
             Midi&nbsp;Africa
           </Link>
 
-          <div className="flex items-center justify-end gap-1">
-            <button aria-label="Search" className="grid h-10 w-10 place-items-center">
-              <Search className="h-4.5 w-4.5" />
+          <div className="flex items-center justify-end gap-0.5 sm:gap-1">
+            <button onClick={() => setCurrency(currency === "NGN" ? "USD" : "NGN")} aria-label="Toggle currency" className="eyebrow px-2 sm:px-3 h-11 hover:opacity-70">
+              {currency === "NGN" ? "₦ NGN" : "$ USD"}
             </button>
+            <Link to="/wishlist" aria-label="Wishlist" className="hidden sm:grid h-11 w-11 place-items-center">
+              <Heart className="h-4.5 w-4.5" />
+            </Link>
+            {session?.user ? (
+              <Link to={role === "admin" ? "/admin" : "/account"} aria-label="Account" className="grid h-11 w-11 place-items-center" title={session.user.email ?? "Account"}>
+                <User className="h-4.5 w-4.5" />
+              </Link>
+            ) : (
+              <Link to="/login" aria-label="Sign in" className="hidden sm:grid h-11 px-2 place-items-center eyebrow">Sign in</Link>
+            )}
+            <Link to="/shop" aria-label="Search" className="hidden sm:grid h-11 w-11 place-items-center">
+              <Search className="h-4.5 w-4.5" />
+            </Link>
             <button
               aria-label="Toggle theme"
               onClick={() => setDark((d) => !d)}
-              className="grid h-10 w-10 place-items-center"
+              className="hidden sm:grid h-11 w-11 place-items-center"
             >
               {dark ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
             </button>
-            <button aria-label="Bag" className="grid h-10 w-10 place-items-center relative">
+            <button onClick={() => setBagOpen(true)} aria-label="Bag" className="grid h-11 w-11 place-items-center relative">
               <ShoppingBag className="h-4.5 w-4.5" />
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+              {count > 0 && (
+                <span className="absolute top-1 right-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-[10px] font-semibold">{count}</span>
+              )}
             </button>
           </div>
         </div>
       </header>
+      <CartDrawer open={bagOpen} onClose={() => setBagOpen(false)} />
 
       <AnimatePresence>
         {open && (
@@ -105,10 +129,10 @@ export function Header() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="grid md:grid-cols-2 gap-10 p-8 md:p-16 max-w-7xl mx-auto">
+            <div className="grid md:grid-cols-2 gap-10 p-6 sm:p-8 md:p-16 max-w-7xl mx-auto overflow-y-auto max-h-[calc(100dvh-73px)]">
               <div>
-                <p className="eyebrow text-muted-foreground mb-8">Menu</p>
-                <ul className="space-y-4 md:space-y-6">
+                <p className="eyebrow text-muted-foreground mb-6 sm:mb-8">Menu</p>
+                <ul className="space-y-3 sm:space-y-4 md:space-y-6">
                   {[{ to: "/", label: "Home" }, ...nav].map((n, i) => (
                     <motion.li
                       key={n.to}
@@ -118,13 +142,22 @@ export function Header() {
                     >
                       <Link
                         to={n.to}
-                        className="font-display text-5xl md:text-7xl block hover-underline"
+                        className="font-display text-4xl sm:text-5xl md:text-7xl block hover-underline"
                       >
                         {n.label}
                       </Link>
                     </motion.li>
                   ))}
                 </ul>
+                <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 eyebrow text-muted-foreground sm:hidden">
+                  <Link to="/wishlist">Wishlist</Link>
+                  {session?.user ? (
+                    <Link to={role === "admin" ? "/admin" : "/account"}>Account</Link>
+                  ) : (
+                    <Link to="/login">Sign in</Link>
+                  )}
+                  <Link to="/account">Track order</Link>
+                </div>
               </div>
               <div className="hidden md:flex flex-col justify-end gap-6">
                 <p className="eyebrow text-muted-foreground">Atelier</p>
