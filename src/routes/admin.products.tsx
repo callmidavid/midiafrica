@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminShell } from "@/components/admin/AdminShell";
-import { adminListProducts, upsertProduct, deleteProduct, type ProductInput } from "@/fns/shop";
+import { pageProducts, upsertProduct, deleteProduct, type ProductInput } from "@/fns/shop";
 import { formatPrice } from "@/lib/currency";
 import { useSettings } from "@/lib/shop-store";
 import { useRefreshProducts } from "@/lib/shop-query";
+import { RowSkeleton } from "@/components/site/Loading";
 
 export const Route = createFileRoute("/admin/products")({
   component: Products,
@@ -17,15 +18,25 @@ const blank: ProductInput = {
   description: "", featured: false, published: true,
 };
 
+const PAGE = 20;
+
 function Products() {
   const qc = useQueryClient();
   const refreshStorefront = useRefreshProducts();
-  const { data, isError } = useQuery({ queryKey: ["admin-products"], queryFn: () => adminListProducts(), retry: 1 });
   const { settings } = useSettings();
   const [editing, setEditing] = useState<(ProductInput & { id?: string }) | null>(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
-  const list = (data ?? []).filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase()));
+
+  const pq = useInfiniteQuery({
+    queryKey: ["admin-products"],
+    queryFn: ({ pageParam }: { pageParam: string | null }) => pageProducts({ data: { cursor: pageParam, limit: PAGE } }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor,
+    retry: 1,
+  });
+  const all = pq.data?.pages.flatMap((p) => p.items) ?? [];
+  const list = all.filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase()));
   const reload = () => { qc.invalidateQueries({ queryKey: ["admin-products"] }); refreshStorefront(); };
 
   async function save(e: React.FormEvent) {
@@ -45,13 +56,13 @@ function Products() {
   return (
     <AdminShell>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-        <div><p className="eyebrow text-muted-foreground mb-2">Catalog · Postgres</p><h1 className="font-display text-4xl">Products ({list.length})</h1></div>
-        <div className="flex gap-2">
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="border border-border bg-transparent px-3 py-2 text-sm outline-none" />
-          <button onClick={() => setEditing({ ...blank })} className="eyebrow bg-foreground text-background px-5 py-2">+ New</button>
+        <div><p className="eyebrow text-muted-foreground mb-2">Catalog · Postgres</p><h1 className="font-display text-4xl">Products</h1></div>
+        <div className="flex flex-wrap gap-2">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search loaded" className="min-w-0 flex-1 border border-border bg-transparent px-3 py-2 text-sm outline-none sm:max-w-48" />
+          <button onClick={() => setEditing({ ...blank })} className="eyebrow shrink-0 bg-foreground text-background px-5 py-2">+ New</button>
         </div>
       </div>
-      {isError && <p className="text-sm text-red-500 border border-red-200 p-3 mb-4">Server unreachable.</p>}
+      {pq.isError && <p className="text-sm text-red-500 border border-red-200 p-3 mb-4">Server unreachable.</p>}
 
       {editing && (
         <form onSubmit={save} className="border border-border p-5 mb-8 grid sm:grid-cols-3 gap-3">
@@ -77,7 +88,7 @@ function Products() {
       )}
 
       <div className="space-y-2">
-        {list.map((p) => (
+        {pq.isPending ? (<><RowSkeleton /><RowSkeleton /><RowSkeleton /></>) : list.map((p) => (
           <div key={p.id} className="flex flex-wrap items-center gap-3 sm:gap-4 border border-border p-3">
             <img src={p.image} alt="" className="h-14 w-12 shrink-0 object-cover bg-muted" />
             <div className="flex-1 min-w-40">
@@ -86,10 +97,16 @@ function Products() {
             </div>
             <div className="flex gap-2">
               <button onClick={() => setEditing({ id: p.id, name: p.name, category: p.category, priceNGN: p.priceNgn, image: p.image, hover: p.hover, fabric: p.fabric ?? "", color: p.color ?? "", sizes: (p.sizes as string[]) ?? [], stock: p.stock, description: p.description ?? "", featured: p.featured, published: p.published })} className="eyebrow border border-border px-4 py-1.5">Edit</button>
-            <button onClick={async () => { if (confirm(`Delete ${p.name}?`)) { await deleteProduct({ data: { id: p.id } }); reload(); } }} className="eyebrow border border-red-200 text-red-500 px-4 py-1.5">Delete</button>
+              <button onClick={async () => { if (confirm(`Delete ${p.name}?`)) { await deleteProduct({ data: { id: p.id } }); reload(); } }} className="eyebrow border border-red-200 text-red-500 px-4 py-1.5">Delete</button>
             </div>
           </div>
         ))}
+        {pq.isFetchingNextPage && <RowSkeleton />}
+        {pq.hasNextPage && (
+          <button onClick={() => pq.fetchNextPage()} disabled={pq.isFetchingNextPage} className="w-full eyebrow border border-border py-3 disabled:opacity-50">
+            {pq.isFetchingNextPage ? "Loading…" : `Load more products (${all.length} shown)`}
+          </button>
+        )}
       </div>
     </AdminShell>
   );

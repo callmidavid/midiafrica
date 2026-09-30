@@ -2,7 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ProductCard } from "@/components/site/ProductCard";
 import { useProducts, useSettings } from "@/lib/shop-store";
+import { useSyncProducts } from "@/lib/shop-query";
 import { Reveal } from "@/components/site/Reveal";
+import { CardSkeleton } from "@/components/site/Loading";
 import { Search } from "lucide-react";
 
 export const Route = createFileRoute("/shop")({
@@ -19,6 +21,7 @@ const categories = ["All", "Women", "Men", "Bridal", "Accessories", "Outerwear"]
 
 function Shop() {
   const { products } = useProducts();
+  const { isPending: syncing } = useSyncProducts();
   const { settings } = useSettings();
   const [cat, setCat] = useState<(typeof categories)[number]>("All");
   const [query, setQuery] = useState("");
@@ -93,7 +96,11 @@ function Shop() {
       </section>
 
       <section className="px-4 sm:px-6 md:px-10 py-10 md:py-20 max-w-[1600px] mx-auto">
-        {filtered.length === 0 ? (
+        {syncing && products.length === 0 ? (
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-3 sm:gap-x-4 gap-y-10">
+            {Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)}
+          </div>
+        ) : filtered.length === 0 ? (
           <p className="text-center text-muted-foreground py-32">No pieces match your filters.</p>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-3 sm:gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-20">

@@ -40,6 +40,10 @@ export function getAuth(): Exclude<typeof _auth, null> {
         },
       }),
       emailAndPassword: { enabled: true, minPasswordLength: 8 },
+      account: {
+        // Let an existing email/password user sign in with Google (same email)
+        accountLinking: { enabled: true, trustedProviders: ["google"] },
+      },
       ...(googleId && googleSecret
         ? { socialProviders: { google: { clientId: googleId, clientSecret: googleSecret } } }
         : {}),

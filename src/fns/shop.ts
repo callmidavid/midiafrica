@@ -2,9 +2,9 @@
 // Prices are always re-read from Postgres; the client cart is never trusted.
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { products, orders, coupons, settings as settingsTable, webhookEvents } from "@/db/schema";
+import { products, orders, coupons, settings as settingsTable, webhookEvents, checkoutProfiles } from "@/db/schema";
 import { getSessionUser, requireAdmin } from "@/lib/session";
 import { toDecimalString, ngnToUsd } from "@/lib/currency";
 import { sendOrderReceipt } from "./email";
@@ -77,6 +77,97 @@ export const deleteProduct = createServerFn({ method: "POST" }).validator((d: an
   await getDb().delete(products).where(eq(products.id, data.id));
   return { ok: true };
 });
+
+// ---------- Cursor pagination (keyset on createdAt desc, id desc) ----------
+const PAGE_SIZE = 20;
+
+function parseCursor(cursor: string | null | undefined): { time: Date; id: string } | null {
+  if (!cursor) return null;
+  const sep = cursor.lastIndexOf("|");
+  if (sep < 0) return null;
+  const time = new Date(cursor.slice(0, sep));
+  const id = cursor.slice(sep + 1);
+  if (Number.isNaN(time.getTime()) || !id) return null;
+  return { time, id };
+}
+
+export const pageProducts = createServerFn({ method: "GET" }).validator((d: any) => d).handler(
+  async ({ data }: { data: { cursor?: string | null; limit?: number } }) => {
+    await requireAdmin(getRequest());
+    const limit = Math.min(Math.max(data.limit ?? PAGE_SIZE, 1), 50);
+    const c = parseCursor(data.cursor);
+    const rows = await getDb()
+      .select()
+      .from(products)
+      .where(c ? or(lt(products.createdAt, c.time), and(eq(products.createdAt, c.time), lt(products.id, c.id))) : undefined)
+      .orderBy(desc(products.createdAt), desc(products.id))
+      .limit(limit + 1);
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const last = items[items.length - 1];
+    return { items, nextCursor: hasMore && last ? `${new Date(last.createdAt).toISOString()}|${last.id}` : null };
+  }
+);
+
+export const pageOrders = createServerFn({ method: "GET" }).validator((d: any) => d).handler(
+  async ({ data }: { data: { cursor?: string | null; limit?: number; status?: string | null } }) => {
+    await requireAdmin(getRequest());
+    const limit = Math.min(Math.max(data.limit ?? PAGE_SIZE, 1), 50);
+    const c = parseCursor(data.cursor);
+    const cursorCond = c ? or(lt(orders.createdAt, c.time), and(eq(orders.createdAt, c.time), lt(orders.id, c.id))) : undefined;
+    const statusCond = data.status && data.status !== "all" ? eq(orders.status, data.status) : undefined;
+    const rows = await getDb()
+      .select()
+      .from(orders)
+      .where(cursorCond && statusCond ? and(cursorCond, statusCond) : (cursorCond ?? statusCond))
+      .orderBy(desc(orders.createdAt), desc(orders.id))
+      .limit(limit + 1);
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const last = items[items.length - 1];
+    return { items, nextCursor: hasMore && last ? `${new Date(last.createdAt).toISOString()}|${last.id}` : null };
+  }
+);
+
+// Lean order rows for the customers aggregate (no heavy items JSON).
+export const listOrdersLean = createServerFn({ method: "GET" }).handler(async () => {
+  await requireAdmin(getRequest());
+  return getDb().select({
+    id: orders.id,
+    userId: orders.userId,
+    customerName: orders.customerName,
+    customerEmail: orders.customerEmail,
+    totalNgn: orders.totalNgn,
+    status: orders.status,
+    createdAt: orders.createdAt,
+  }).from(orders).orderBy(desc(orders.createdAt));
+});
+
+// ---------- Saved checkout profile (per account; guests use localStorage) ----------
+export const getMyProfile = createServerFn({ method: "GET" }).handler(async () => {
+  const user = await getSessionUser(getRequest());
+  if (!user) return null;
+  const rows = await getDb().select().from(checkoutProfiles).where(eq(checkoutProfiles.userId, user.id));
+  return rows[0] ?? null;
+});
+
+export const saveMyProfile = createServerFn({ method: "POST" }).validator((d: any) => d).handler(
+  async ({ data }: { data: { name: string; phone: string; address: string; city: string; state: string; country: string } }) => {
+    const user = await getSessionUser(getRequest());
+    if (!user) throw new Response("Sign in to save details", { status: 401 });
+    const db = getDb();
+    const row = {
+      userId: user.id,
+      name: data.name ?? "", phone: data.phone ?? "", address: data.address ?? "",
+      city: data.city ?? "", state: data.state ?? "", country: data.country || "Nigeria",
+      updatedAt: new Date(),
+    };
+    const existing = await db.select().from(checkoutProfiles).where(eq(checkoutProfiles.userId, user.id));
+    if (existing.length) await db.update(checkoutProfiles).set(row).where(eq(checkoutProfiles.userId, user.id));
+    else await db.insert(checkoutProfiles).values(row);
+    return { ok: true };
+  }
+);
 
 // ---------- Coupons ----------
 export const listCoupons = createServerFn({ method: "GET" }).handler(async () => {
@@ -155,6 +246,18 @@ export const createCheckout = createServerFn({ method: "POST" }).validator((d: a
       currency: "NGN", status: "pending", couponCode,
     });
 
+    // Remember details for next checkout (signed-in shoppers)
+    if (user?.id) {
+      const profile = {
+        userId: user.id, name: data.customer.name, phone: data.customer.phone,
+        address: data.customer.address, city: data.customer.city,
+        state: data.customer.state, country: data.customer.country || "Nigeria", updatedAt: new Date(),
+      };
+      const existing = await db.select().from(checkoutProfiles).where(eq(checkoutProfiles.userId, user.id));
+      if (existing.length) await db.update(checkoutProfiles).set(profile).where(eq(checkoutProfiles.userId, user.id));
+      else await db.insert(checkoutProfiles).values(profile);
+    }
+
     const origin = (process.env.PUBLIC_SITE_URL ?? "").replace(/\/$/, "") || new URL(req.url).origin;
     // Bachs rejects non-public redirect URLs (localhost). They're optional and
     // only used by the hosted-page flow — the overlay doesn't need them.
@@ -169,7 +272,7 @@ export const createCheckout = createServerFn({ method: "POST" }).validator((d: a
         metadata: { order_id: orderId },
         ...(isPublicOrigin
           ? {
-              success_url: `${origin}/checkout/success?order=${orderId}`,
+              success_url: `${origin}/order/${orderId}`,
               cancel_url: `${origin}/checkout?cancelled=${orderId}`,
             }
           : {}),
@@ -214,6 +317,9 @@ export const adminListOrders = createServerFn({ method: "GET" }).handler(async (
 export const setOrderStatus = createServerFn({ method: "POST" }).validator((d: any) => d).handler(
   async ({ data }: { data: { id: string; status: string } }) => {
     await requireAdmin(getRequest());
+    // Payment states (pending/paid/failed) are webhook-only — admins drive fulfilment.
+    const allowed = ["processing", "in_transit", "delivered", "cancelled", "refunded"];
+    if (!allowed.includes(data.status)) throw new Error(`Status is automatic — admins can only set: ${allowed.join(", ")}`);
     await getDb().update(orders).set({ status: data.status, updatedAt: new Date() }).where(eq(orders.id, data.id));
     return { ok: true };
   }

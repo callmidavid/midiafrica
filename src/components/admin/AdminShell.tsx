@@ -1,5 +1,7 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { authClient, useSession } from "@/lib/auth-client";
+import { PageLoader } from "@/components/site/Loading";
 import { LayoutDashboard, Package, ShoppingCart, Users, Ticket, Settings, LogOut } from "lucide-react";
 
 const links = [
@@ -15,20 +17,24 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = useSession();
   const nav = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const [loggingOut, setLoggingOut] = useState(false);
   const role = (session?.user as { role?: string } | undefined)?.role;
 
-  if (isPending) return <div className="min-h-screen grid place-items-center"><p className="eyebrow text-muted-foreground">Loading…</p></div>;
-  if (!session?.user) {
-    return (
-      <div className="min-h-screen grid place-items-center px-6">
-        <div className="text-center">
-          <p className="eyebrow text-muted-foreground mb-3">Restricted</p>
-          <p className="font-display text-3xl mb-6">Sign in to continue</p>
-          <Link to="/login" search={{ redirect: path } as any} className="eyebrow bg-foreground text-background px-8 py-3">Sign in →</Link>
-        </div>
-      </div>
-    );
+  // Logged out → bounce to login (with return path), never a dead end.
+  useEffect(() => {
+    if (!isPending && !session?.user) nav({ to: "/login", search: { redirect: path } as any, replace: true });
+  }, [isPending, session, nav, path]);
+
+  async function logout() {
+    setLoggingOut(true);
+    try {
+      await authClient.signOut();
+    } finally {
+      window.location.href = "/login";
+    }
   }
+
+  if (isPending || !session?.user) return <div className="min-h-screen grid place-items-center px-6"><PageLoader label={loggingOut ? "Signing out…" : "Checking access…"} /></div>;
   if (role !== "admin") {
     return (
       <div className="min-h-screen grid place-items-center px-6">
@@ -54,7 +60,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="mt-6 flex md:flex-col gap-2">
           <Link to="/" className="eyebrow text-muted-foreground px-3">← View store</Link>
-          <button onClick={async () => { await authClient.signOut(); nav({ to: "/login" }); }} className="eyebrow text-muted-foreground px-3 flex items-center gap-2"><LogOut className="h-3.5 w-3.5" /> Logout</button>
+          <button onClick={logout} disabled={loggingOut} className="eyebrow text-muted-foreground px-3 flex items-center gap-2 disabled:opacity-50"><LogOut className="h-3.5 w-3.5" /> {loggingOut ? "Signing out…" : "Logout"}</button>
         </div>
       </aside>
       <main className="p-5 md:p-10 max-w-6xl">{children}</main>

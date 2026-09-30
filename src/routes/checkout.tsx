@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useCart, useProducts, useSettings } from "@/lib/shop-store";
 import { useSession } from "@/lib/auth-client";
 import { formatPrice, ngnToUsd } from "@/lib/currency";
-import { createCheckout } from "@/fns/shop";
+import { createCheckout, getMyProfile } from "@/fns/shop";
 import { openBachsOverlay } from "@/lib/bachs";
 
 export const Route = createFileRoute("/checkout")({
@@ -11,6 +12,15 @@ export const Route = createFileRoute("/checkout")({
 });
 
 const empty = { name: "", email: "", phone: "", address: "", city: "", state: "Lagos", country: "Nigeria", notes: "" };
+const DRAFT_KEY = "midi-checkout-draft-v1";
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (raw) return { ...empty, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return { ...empty };
+}
 
 function CheckoutPage() {
   const nav = useNavigate();
@@ -18,11 +28,28 @@ function CheckoutPage() {
   const { products } = useProducts();
   const { settings } = useSettings();
   const { data: session } = useSession();
-  const [form, setForm] = useState(() => ({
-    ...empty,
-    name: session?.user?.name ?? "",
-    email: session?.user?.email ?? "",
+  const [form, setForm] = useState<typeof empty>(() => ({
+    ...loadDraft(),
+    ...(session?.user ? { name: session.user.name ?? "", email: session.user.email ?? "" } : {}),
   }));
+  const profile = useQuery({ queryKey: ["my-profile"], queryFn: () => getMyProfile(), enabled: !!session?.user, retry: 1, staleTime: 60_000 });
+
+  // Prefill saved details (account profile first, then session basics)
+  useEffect(() => {
+    const p = profile.data;
+    if (p) {
+      setForm((f) => ({
+        ...f,
+        name: p.name || f.name || session?.user?.name || "",
+        email: f.email || session?.user?.email || "",
+        phone: p.phone || f.phone,
+        address: p.address || f.address,
+        city: p.city || f.city,
+        state: p.state || f.state,
+        country: p.country || f.country,
+      }));
+    }
+  }, [profile.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const [zone, setZone] = useState<"lagos" | "nationwide" | "global">("lagos");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -33,7 +60,17 @@ function CheckoutPage() {
   const subtotal = lines.reduce((s, l) => s + l.product.priceNGN * l.qty, 0);
   const previewShip = subtotal >= settings.freeShippingAbove || subtotal === 0 ? 0 : shipBase;
 
-  const set = (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const v = e.target.value;
+    // Guests: keep a local draft so nothing is retyped. Signed-in shoppers
+    // persist server-side on every successful checkout.
+    if (!session?.user && k !== "notes") {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...form, [k]: v }));
+      } catch { /* ignore */ }
+    }
+    setForm((f) => ({ ...f, [k]: v }));
+  };
 
   async function pay() {
     setError(null);
@@ -52,9 +89,9 @@ function CheckoutPage() {
       });
       clear();
       await openBachsOverlay(res.checkoutUrl, (e) => {
-        if (e.type === "checkout.completed") nav({ to: "/checkout/success", search: { order: res.orderId } as any });
+        if (e.type === "checkout.completed") nav({ to: "/order/$id", params: { id: res.orderId } });
       });
-      nav({ to: "/checkout/success", search: { order: res.orderId } as any });
+      nav({ to: "/order/$id", params: { id: res.orderId } });
     } catch (e: any) {
       setError(e.message ?? "Payment failed to start.");
     } finally {
@@ -66,6 +103,15 @@ function CheckoutPage() {
 
   return (
     <div className="pt-32 md:pt-40 pb-24 px-6 md:px-10 max-w-6xl mx-auto">
+      {busy && (
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-background/90 backdrop-blur-sm px-6" role="status" aria-live="polite">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <span className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-foreground" />
+            <p className="eyebrow">Creating secure payment…</p>
+            <p className="text-sm text-muted-foreground">Do not close this page.</p>
+          </div>
+        </div>
+      )}
       <p className="eyebrow text-muted-foreground mb-4">Secure checkout · Bachs</p>
       <h1 className="font-display text-5xl md:text-7xl mb-12">Checkout</h1>
       {!session?.user && (
@@ -74,7 +120,12 @@ function CheckoutPage() {
       <div className="grid md:grid-cols-[1fr_360px] gap-12">
         <div className="space-y-10">
           <section>
-            <h2 className="eyebrow mb-5">Contact + Shipping</h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-5">
+              <h2 className="eyebrow">Contact + Shipping</h2>
+              {profile.data && (profile.data.name || profile.data.address) && (
+                <p className="text-xs text-green-600">Saved details filled in ✓</p>
+              )}
+            </div>
             <div className="grid sm:grid-cols-2 gap-3">
               <input value={form.name} onChange={set("name")} placeholder="Full name *" className="border border-border bg-transparent px-4 py-3 text-sm outline-none focus:border-foreground" />
               <input value={form.email} onChange={set("email")} placeholder="Email *" type="email" className="border border-border bg-transparent px-4 py-3 text-sm outline-none focus:border-foreground" />

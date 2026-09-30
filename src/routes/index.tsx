@@ -22,6 +22,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "Midi Africa — Redefining African Luxury" },
       { property: "og:description", content: "Where timeless craftsmanship meets contemporary elegance." },
     ],
+    links: [{ rel: "preload", as: "image", href: hero, fetchPriority: "high" }],
   }),
   component: Home,
 });

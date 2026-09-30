@@ -12,7 +12,10 @@ export function bachsBase(sandbox: boolean): string {
 export async function openBachsOverlay(checkoutUrl: string, onEvent?: (e: { type: string; data?: any }) => void) {
   const { loadBachs } = await import("@bachs/js");
   const Bachs: any = await loadBachs();
-  Bachs.Initialize({ onEvent: (e: any) => onEvent?.(e) });
+  // Sandbox sessions live on sandbox-checkout.bachs.io, live on checkout.bachs.io.
+  // The SDK origin-locks to its baseUrl, so point it at the session's own origin.
+  const baseUrl = new URL(checkoutUrl).origin;
+  Bachs.Initialize({ baseUrl, onEvent: (e: any) => onEvent?.(e) });
   await Bachs.Checkout.open({ checkoutUrl });
 }
 

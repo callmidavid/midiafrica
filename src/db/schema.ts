@@ -117,3 +117,15 @@ export const settings = pgTable(
   { key: text("key").notNull(), value: text("value").notNull() },
   (t) => [primaryKey({ columns: [t.key] })]
 );
+
+// Saved checkout details per account — prefill so customers never retype.
+export const checkoutProfiles = pgTable("checkout_profiles", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  address: text("address").notNull().default(""),
+  city: text("city").notNull().default(""),
+  state: text("state").notNull().default(""),
+  country: text("country").notNull().default("Nigeria"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});

@@ -8,6 +8,13 @@
       "when": 1790755482772,
       "tag": "0000_slimy_prism",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790766392378,
+      "tag": "0001_checkout_profiles",
+      "breakpoints": true
     }
   ]
 }
