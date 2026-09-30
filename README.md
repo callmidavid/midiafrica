@@ -43,13 +43,28 @@ ADMIN_EMAIL=you@example.com npm run admin:promote
 
 Then `/admin/login` → full panel (role-guarded client + server: `requireAdmin`).
 
-## 4. Run
+## 4. Run & deploy
 
 ```bash
-npm run dev          # dev server
-npm run build        # prod build (Nitro; node-server locally, Cloudflare on Lovable)
+npm run dev          # dev server (:8080)
+npm run build        # prod build → .output/ (Nitro; node-server locally)
 node --env-file=.env .output/server/index.mjs   # serve local prod build
 ```
+
+**Vercel** (deploy target): Nitro auto-detects the `vercel` preset from the
+build, producing `.vercel/output` (server + API routes + SSR — not a static
+`dist/`). Dashboard settings:
+- Framework Preset: **Other** (NOT Vite — the Vite preset forces a static `dist/` output, which is why old deploys looked stale)
+- Build Command: `bun run build` (or `npm run build`)
+- Output Directory: **empty / default** (do not set `dist`)
+- Environment Variables: copy every key from `.env` — `DATABASE_URL`,
+  `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` + `PUBLIC_SITE_URL` (set to the
+  `https://your-app.vercel.app` domain), `BACHS_*`, `SENVIOK_API_KEY`,
+  `EMAIL_FROM`, `GOOGLE_*`, `ADMIN_EMAIL`
+- After deploy: register `https://your-app.vercel.app/api/webhooks/bachs`
+  in the Bachs dashboard, and add
+  `https://your-app.vercel.app/api/auth/callback/google` to Google's
+  authorized redirect URIs.
 
 ## 5. Payments (Bachs)
 
