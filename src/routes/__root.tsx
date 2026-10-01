@@ -14,6 +14,7 @@ import appCss from "../styles.css?url";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { useSyncProducts } from "@/lib/shop-query";
+import { isMaintenanceMode } from "@/lib/maintenance";
 
 function NotFoundComponent() {
   return (
@@ -90,10 +91,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  // Evaluated server-side on every request — the single source of truth.
+  const maintenance =
+    typeof process !== "undefined" &&
+    (process.env.MAINTENANCE_MODE === "true" || process.env.VITE_MAINTENANCE_MODE === "true");
   return (
     <html lang="en">
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: `window.__MAINTENANCE__=${maintenance ? "true" : "false"};` }} />
       </head>
       <body>
         {children}
@@ -109,6 +115,15 @@ function RootComponent() {
   const isAdmin = path.startsWith("/admin");
   const isAuthPage = path === "/login" || path === "/signup";
 
+  // Holding page: the entire site — including admin and login — is paused.
+  if (isMaintenanceMode()) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MaintenancePage />
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <CatalogSync />
@@ -118,6 +133,22 @@ function RootComponent() {
       </main>
       {!isAdmin && !isAuthPage && <Footer />}
     </QueryClientProvider>
+  );
+}
+
+function MaintenancePage() {
+  return (
+    <div className="min-h-dvh grid place-items-center bg-ink text-ivory px-6">
+      <div className="max-w-xl text-center">
+        <p className="eyebrow text-ivory/60 mb-6">Midi Africa</p>
+        <h1 className="font-display text-4xl sm:text-5xl md:text-6xl leading-tight mb-6">
+          Sorry, this website is temporarily down due to hosting settlement issues.
+        </h1>
+        <p className="text-ivory/70 leading-relaxed">
+          We're working to get the atelier back online. Please check back soon.
+        </p>
+      </div>
+    </div>
   );
 }
 

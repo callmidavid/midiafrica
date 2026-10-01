@@ -39,6 +39,14 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // Authoritative maintenance gate (prod): static 503 for page navigations.
+    // Survives stale client bundles/caches — the app shell can never render.
+    if (isMaintenanceRequest(request)) {
+      return new Response(renderMaintenancePage(), {
+        status: 503,
+        headers: { "content-type": "text/html; charset=utf-8", "retry-after": "3600" },
+      });
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
@@ -52,3 +60,25 @@ export default {
     }
   },
 };
+
+const MAINTENANCE_ALLOW = ["/api/", "/assets/", "/_"];
+const MAINTENANCE_ALLOW_EXACT = new Set(["/favicon.ico"]);
+
+function isMaintenanceRequest(request: Request): boolean {
+  const maintenance =
+    process.env.MAINTENANCE_MODE === "true" || process.env.VITE_MAINTENANCE_MODE === "true";
+  if (!maintenance) return false;
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  const accept = request.headers.get("accept") ?? "";
+  if (!accept.includes("text/html")) return false; // API / RPC / assets pass through
+  const path = new URL(request.url).pathname;
+  if (MAINTENANCE_ALLOW_EXACT.has(path)) return false;
+  if (MAINTENANCE_ALLOW.some((p) => path === p || path.startsWith(p))) return false;
+  return true;
+}
+
+function renderMaintenancePage(): string {
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Temporarily down — Midi Africa</title>
+<style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#292524;color:#faf7f2;font-family:Georgia,serif;padding:24px}main{max-width:34rem;text-align:center}.eyebrow{font-family:system-ui;font-size:.7rem;letter-spacing:.32em;text-transform:uppercase;opacity:.6;margin-bottom:24px}h1{font-weight:400;font-size:clamp(1.8rem,6vw,3rem);line-height:1.2;margin:0 0 24px}p{opacity:.7;line-height:1.6}</style></head>
+<body><main><div class="eyebrow">Midi Africa</div><h1>Sorry, this website is temporarily down due to hosting settlement issues.</h1><p>We&apos;re working to get the atelier back online. Please check back soon.</p></main></body></html>`;
+}

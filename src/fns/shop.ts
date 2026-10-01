@@ -7,6 +7,7 @@ import { getDb } from "@/db/client";
 import { products, orders, coupons, settings as settingsTable, webhookEvents, checkoutProfiles } from "@/db/schema";
 import { getSessionUser, requireAdmin } from "@/lib/session";
 import { toDecimalString, ngnToUsd } from "@/lib/currency";
+import { isMaintenanceMode } from "@/lib/maintenance";
 import { sendOrderReceipt } from "./email";
 
 // ---------- helpers (server) ----------
@@ -200,6 +201,7 @@ export type CheckoutCustomer = { name: string; email: string; phone: string; add
 
 export const createCheckout = createServerFn({ method: "POST" }).validator((d: any) => d).handler(
   async ({ data }: { data: { items: CheckoutItem[]; customer: CheckoutCustomer; zone: "lagos" | "nationwide" | "global"; couponCode: string | null } }) => {
+    if (isMaintenanceMode()) throw new Error("Store is temporarily down. Please check back soon.");
     const req = getRequest();
     const user = await getSessionUser(req).catch(() => null);
     const db = getDb();
